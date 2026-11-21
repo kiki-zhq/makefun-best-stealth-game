@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>The Quiet Gallery — a stealth game</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0b0e1a;
+    color: #e8eaf2;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 10px 22px;
+  }
+  #hud {
+    width: 1152px;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 8px 14px;
+    background: #161a2b;
+    border: 1px solid #2b3150;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    font-size: 14px;
+  }
+  #hud-level { font-weight: 700; color: #ffd166; white-space: nowrap; }
+  #hud-relics { color: #ff8fa3; font-weight: 600; white-space: nowrap; }
+  #hud-coins { color: #ffd166; font-weight: 600; white-space: nowrap; }
+  #hud-time { color: #9fb4ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #hud-alert-wrap {
+    flex: 1 1 120px;
+    height: 10px;
+    background: #0b0e1a;
+    border: 1px solid #2b3150;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  #hud-alert-fill { height: 100%; width: 0%; background: #7dd87d; transition: width 0.15s; }
+  #hud-objective { flex: 2 1 auto; color: #b9c0d8; font-size: 13px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mute-btn {
+    background: none; border: 1px solid #2b3150; color: #e8eaf2;
+    border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 13px; white-space: nowrap;
+  }
+  #stage { position: relative; width: 1152px; max-width: 100%; }
+  canvas {
+    display: block;
+    width: 1152px;
+    max-width: 100%;
+    height: auto;
+    background: #10131f;
+    border: 1px solid #2b3150;
+    border-radius: 0 0 10px 10px;
+  }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; text-align: center;
+    background: rgba(5, 7, 18, 0.82);
+    border-radius: 0 0 10px 10px;
+    padding: 24px;
+  }
+  .overlay.hidden { display: none; }
+  .overlay h1 { font-size: 44px; letter-spacing: 2px; color: #ffd166; text-shadow: 0 2px 18px rgba(255, 209, 102, 0.35); }
+  .overlay h2 { font-size: 32px; color: #ffd166; }
+  .overlay p { max-width: 640px; line-height: 1.55; color: #c9d0e6; font-size: 15px; }
+  .overlay .keys { font-size: 13px; color: #8f97b5; }
+  .overlay .keys b { color: #e8eaf2; }
+  button {
+    background: #ffd166; color: #1a1405; border: none; border-radius: 8px;
+    padding: 12px 28px; font-size: 17px; font-weight: 700; cursor: pointer;
+  }
+  button:hover { background: #ffdf8a; }
+  button.ghost { background: transparent; color: #e8eaf2; border: 1px solid #4a5170; font-size: 14px; padding: 9px 18px; }
+  #win-stats, #lose-stats { color: #9fb4ff; font-size: 15px; }
+  #foot { margin-top: 12px; font-size: 12px; color: #6b7390; }
+  /* Screenshot poses: strip page chrome so the game fits exactly in 1280x720. */
+  body.shot { padding: 0; }
+  body.shot #foot { display: none; }
+  body.shot #hud { border-radius: 0; }
+  body.shot canvas { border-radius: 0; }
+  body.shot .overlay { border-radius: 0; }
+</style>
+</head>
+<body>
+  <div id="hud">
+    <span id="hud-level">Level 1 — The Quiet Gallery</span>
+    <span id="hud-relics">◆ 0/3</span>
+    <span id="hud-coins">◉ 5</span>
+    <span id="hud-time">0:00</span>
+    <span id="hud-alert-wrap" title="Alert level"><span id="hud-alert-fill"></span></span>
+    <span id="hud-objective"></span>
+    <button id="mute-btn" type="button">🔊 Sound</button>
+  </div>
+  <div id="stage">
+    <canvas id="game" width="1152" height="672"></canvas>
+    <div id="overlay-menu" class="overlay">
+      <h1>THE QUIET GALLERY</h1>
+      <p>A night museum. Three relics a wing. Guards with lanterns and long
+      sightlines. Slip past them in the dark, steal every relic, and reach
+      the exit unseen.</p>
+      <p class="keys"><b>WASD / arrows</b> move &nbsp;·&nbsp; <b>Shift</b> sneak &nbsp;·&nbsp;
+      <b>Click</b> throw a coin to distract &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp;
+      <b>M</b> mute &nbsp;·&nbsp; <b>R</b> restart</p>
+      <p class="keys">Crates and pillars block sight. Tall plants hide you.
+      Shadow floor muffles detection — lamp light exposes you. Running is loud.</p>
+      <button id="start-btn" type="button">Begin the heist</button>
+    </div>
+    <div id="overlay-pause" class="overlay hidden">
+      <h2>Paused</h2>
+      <p>The guards keep their rounds. Take a breath.</p>
+      <button id="resume-btn" type="button">Resume</button>
+      <button id="restart-btn" type="button" class="ghost">Restart level</button>
+    </div>
+    <div id="overlay-win" class="overlay hidden">
+      <h2 id="win-title">Clean Getaway</h2>
+      <p id="win-stats"></p>
+      <button id="win-next" type="button">Next level</button>
+    </div>
+    <div id="overlay-lose" class="overlay hidden">
+      <h2>Caught!</h2>
+      <p id="lose-stats"></p>
+      <p>The gallery keeps its relics — this time. Study the patrols and try again.</p>
+      <button id="retry-btn" type="button">Try again</button>
+      <button id="menu-btn" type="button" class="ghost">Back to menu</button>
+    </div>
+  </div>
+  <div id="foot">The Quiet Gallery — an original stealth game built for make.fun's "Make the best stealth game" bounty.</div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
